@@ -1,0 +1,1890 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Escape 3D: Huyendo de las Sombras</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'Courier New', monospace;
+            background: #000;
+            position: fixed;
+            touch-action: none;
+        }
+        #game-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            background: radial-gradient(circle at center, #0a0a0f 0%, #000000 100%);
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        /* UI Elements */
+        #ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+        #tension-bar {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 8px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        #tension-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #ff0000, #8b0000);
+            transition: width 0.3s;
+            box-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+        }
+        #objectives {
+            position: absolute;
+            top: 50px;
+            left: 20px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 12px;
+            text-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
+        }
+        #game-stats {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 14px;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
+        }
+        .stat-item {
+            margin: 5px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .heart {
+            color: #ff4444;
+            font-size: 16px;
+        }
+        .shield-icon {
+            color: #4ade80;
+            font-size: 16px;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.1); }
+        }
+        .objective {
+            margin: 5px 0;
+            transition: all 0.3s;
+        }
+        .objective.completed {
+            text-decoration: line-through;
+            color: #4ade80;
+        }
+        /* Controls */
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 200px;
+            pointer-events: none;
+        }
+        #joystick-area {
+            position: absolute;
+            bottom: 30px;
+            left: 30px;
+            width: 120px;
+            height: 120px;
+            pointer-events: all;
+        }
+        #joystick-base {
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.1), transparent);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            position: relative;
+        }
+        #joystick-stick {
+            width: 50px;
+            height: 50px;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.2));
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            transition: all 0.1s;
+        }
+        #interact-btn {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            width: 90px;
+            height: 90px;
+            background: radial-gradient(circle, rgba(100, 150, 255, 0.4), rgba(50, 100, 200, 0.2));
+            border: 3px solid rgba(100, 150, 255, 0.6);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 11px;
+            font-weight: bold;
+            pointer-events: all;
+            cursor: pointer;
+            text-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
+            opacity: 0;
+            transition: all 0.3s;
+            text-align: center;
+            padding: 5px;
+        }
+        #interact-btn.visible {
+            opacity: 1;
+            animation: pulse-btn 1.5s infinite;
+        }
+        @keyframes pulse-btn {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 20px rgba(100, 150, 255, 0.4); }
+            50% { transform: scale(1.05); box-shadow: 0 0 30px rgba(100, 150, 255, 0.6); }
+        }
+        #interact-btn:active {
+            transform: scale(0.9);
+            background: radial-gradient(circle, rgba(150, 200, 255, 0.6), rgba(100, 150, 255, 0.4));
+        }
+        /* Puzzle Modal */
+        #puzzle-modal {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            width: 90%;
+            max-width: 400px;
+            background: rgba(10, 10, 20, 0.95);
+            border: 2px solid rgba(100, 150, 255, 0.5);
+            border-radius: 15px;
+            padding: 20px;
+            pointer-events: all;
+            transition: transform 0.3s;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.9);
+        }
+        #puzzle-modal.active {
+            transform: translate(-50%, -50%) scale(1);
+        }
+        #puzzle-title {
+            color: #fff;
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 18px;
+            text-shadow: 0 0 10px rgba(100, 150, 255, 0.8);
+        }
+        #puzzle-content {
+            color: rgba(255, 255, 255, 0.8);
+            min-height: 150px;
+        }
+        .code-input {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .code-digit {
+            width: 50px;
+            height: 50px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid rgba(100, 150, 255, 0.5);
+            border-radius: 8px;
+            text-align: center;
+            font-size: 24px;
+            color: #fff;
+            outline: none;
+        }
+        .symbol-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .symbol {
+            aspect-ratio: 1;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid rgba(100, 150, 255, 0.5);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .symbol:active {
+            transform: scale(0.9);
+            background: rgba(100, 150, 255, 0.3);
+        }
+        .symbol.selected {
+            border-color: #4ade80;
+            box-shadow: 0 0 20px rgba(74, 222, 128, 0.5);
+        }
+        #puzzle-close {
+            width: 100%;
+            padding: 12px;
+            margin-top: 20px;
+            background: rgba(100, 150, 255, 0.3);
+            border: 2px solid rgba(100, 150, 255, 0.5);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        #puzzle-close:active {
+            background: rgba(100, 150, 255, 0.5);
+        }
+        /* Message */
+        #message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 20px 30px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            color: #fff;
+            font-size: 16px;
+            text-align: center;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            z-index: 100;
+        }
+        #message.show {
+            opacity: 1;
+        }
+        /* Final Screen */
+        #final-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 1s;
+        }
+        #final-screen.show {
+            display: flex;
+            opacity: 1;
+        }
+        #envelope {
+            width: 250px;
+            height: 150px;
+            position: relative;
+            animation: float 3s ease-in-out infinite;
+            cursor: pointer;
+            transition: transform 0.3s;
+        }
+        #envelope:hover {
+            transform: scale(1.05);
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+        .envelope-part {
+            position: absolute;
+            background: #f5f5f5;
+        }
+        .envelope-back {
+            width: 100%;
+            height: 100%;
+            border-radius: 5px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        .envelope-flap {
+            width: 0;
+            height: 0;
+            border-left: 125px solid transparent;
+            border-right: 125px solid transparent;
+            border-bottom: 75px solid #e0e0e0;
+            top: 0;
+            left: 0;
+            transform-origin: top;
+            transition: transform 1s;
+            z-index: 2;
+        }
+        #envelope.open .envelope-flap {
+            transform: rotateX(180deg);
+        }
+        #letter {
+            position: absolute;
+            width: 220px;
+            height: 300px;
+            background: #fff;
+            border-radius: 5px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+            padding: 30px;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #333;
+            opacity: 0;
+            transform: translateY(50px);
+            transition: all 1s;
+            overflow-y: auto;
+            display: none;
+        }
+        #letter.show {
+            opacity: 1;
+            transform: translateY(0);
+            display: block;
+        }
+        #letter h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 20px;
+            text-align: center;
+        }
+        #replay-btn {
+            position: absolute;
+            bottom: 50px;
+            padding: 15px 30px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 25px;
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+            opacity: 0;
+            pointer-events: none;
+        }
+        #replay-btn.show {
+            opacity: 1;
+            pointer-events: all;
+        }
+        #replay-btn:active {
+            background: rgba(255, 255, 255, 0.4);
+            transform: scale(0.95);
+        }
+        /* Glitch Effect */
+        .glitch {
+            animation: glitch 0.3s infinite;
+        }
+        @keyframes glitch {
+            0% { transform: translate(0); }
+            20% { transform: translate(-5px, 5px); }
+            40% { transform: translate(-5px, -5px); }
+            60% { transform: translate(5px, 5px); }
+            80% { transform: translate(5px, -5px); }
+            100% { transform: translate(0); }
+        }
+        /* Loading Screen */
+        #loading {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            z-index: 2000;
+            transition: opacity 0.5s;
+        }
+        #loading.hide {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        #start-btn {
+            margin-top: 30px;
+            padding: 15px 40px;
+            background: rgba(100, 150, 255, 0.3);
+            border: 2px solid rgba(100, 150, 255, 0.5);
+            border-radius: 25px;
+            color: #fff;
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        #start-btn:active {
+            background: rgba(100, 150, 255, 0.5);
+            transform: scale(0.95);
+        }
+        .particles {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        
+        <div id="ui-overlay">
+            <div id="game-stats">
+                <div class="stat-item">
+                    <span>🎮 Nivel: <span id="level-display">1</span>/5</span>
+                </div>
+                <div class="stat-item">
+                    <span id="lives-display"></span>
+                </div>
+                <div class="stat-item">
+                    <span>⭐ Puntos: <span id="score-display">0</span></span>
+                </div>
+                <div class="stat-item">
+                    <span>🧩 Acertijos: <span id="items-display">0/3</span></span>
+                </div>
+                <div class="stat-item" id="shield-display" style="display: none;">
+                    <span class="shield-icon">🛡️</span>
+                    <span id="shield-time">0s</span>
+                </div>
+            </div>
+            
+            <div id="tension-bar">
+                <div id="tension-fill"></div>
+            </div>
+            
+            <div id="objectives">
+                <div class="objective" id="obj1">🔐 Encontrar código del cajón</div>
+                <div class="objective" id="obj2">🧩 Resolver puzzle de símbolos</div>
+                <div class="objective" id="obj3">🔑 Encontrar la llave</div>
+                <div class="objective" id="obj4" style="display:none">🧠 Completar memoria</div>
+                <div class="objective" id="obj5" style="display:none">🔢 Resolver ecuación</div>
+                <div class="objective" id="obj6" style="display:none">🌀 Escapar del laberinto</div>
+                <div class="objective" id="door-ready" style="display:none; color: #4ade80; font-size: 16px; margin-top: 10px; animation: pulse 1s infinite;">
+                    🚪 ¡PUERTA DESBLOQUEADA! Ve a la salida
+                </div>
+            </div>
+        </div>
+        <div id="controls">
+            <div id="joystick-area">
+                <div id="joystick-base">
+                    <div id="joystick-stick"></div>
+                </div>
+            </div>
+            <div id="interact-btn">USAR</div>
+        </div>
+        <div id="puzzle-modal">
+            <div id="puzzle-title"></div>
+            <div id="puzzle-content"></div>
+            <button id="puzzle-close">CERRAR</button>
+        </div>
+        <div id="message"></div>
+        <div id="final-screen">
+            <canvas class="particles" id="particles-canvas"></canvas>
+            <div id="envelope">
+                <div class="envelope-part envelope-back"></div>
+                <div class="envelope-part envelope-flap"></div>
+            </div>
+            <div id="letter">
+                <h2>¡Victoria Total! 🏆</h2>
+                <p><strong>Puntuación Final: <span id="final-score"></span> ⭐</strong></p>
+                <p><strong>Niveles Completados: 5/5 🎮</strong></p>
+                <hr style="margin: 15px 0; border: 1px solid #ddd;">
+                <p>Has demostrado valentía, astucia y determinación excepcionales. Cada sombra vencida, cada acertijo resuelto, te ha convertido en un verdadero maestro del escape.</p>
+                <p>Atravesaste cinco niveles de oscuridad creciente, enfrentándote a múltiples sombras, resolviendo enigmas complejos y superando tus propios límites.</p>
+                <p>Esta experiencia fue solo el comienzo. Ahora llevas contigo la luz que conquistaste en la oscuridad.</p>
+                <p style="text-align: right; margin-top: 20px;">Con admiración,<br>Las Sombras Derrotadas 🌟</p>
+            </div>
+            <button id="replay-btn">Revivir Experiencia</button>
+        </div>
+        <div id="loading">
+            <div class="spinner"></div>
+            <p style="margin-top: 20px;">Cargando...</p>
+            <button id="start-btn" style="display: none;">INICIAR JUEGO</button>
+        </div>
+    </div>
+    <script>
+        // Game State
+        const game = {
+            canvas: null,
+            ctx: null,
+            width: 0,
+            height: 0,
+            level: 1,
+            maxLevel: 5,
+            lives: 3,
+            score: 0,
+            hasShield: false,
+            shieldTime: 0,
+            hasSpeed: false,
+            speedTime: 0,
+            player: {
+                x: 250,
+                y: 250,
+                z: 0,
+                angle: 0,
+                radius: 15,
+                speed: 2
+            },
+            shadow: {
+                x: 50,
+                y: 50,
+                z: 0,
+                speed: 0.5,
+                active: false,
+                spawnTime: 0,
+                count: 1
+            },
+            shadows: [],
+            camera: {
+                angle: 0,
+                targetAngle: 0,
+                pitch: 0
+            },
+            joystick: {
+                active: false,
+                x: 0,
+                y: 0,
+                startX: 0,
+                startY: 0
+            },
+            puzzles: {
+                code: { solved: false, code: '528' },
+                symbols: { solved: false, order: ['🌙', '⭐', '☀️'], selected: [] },
+                key: { solved: false, found: false },
+                memory: { solved: false, sequence: [], playerSequence: [] },
+                math: { solved: false, answer: 0 },
+                maze: { solved: false }
+            },
+            objects: [],
+            powerups: [],
+            state: 'playing', // playing, escaping, finished
+            tension: 0,
+            time: 0,
+            nearObject: null,
+            collectedItems: 0,
+            requiredItems: 3
+        };
+        // Audio Context
+        const audio = {
+            context: null,
+            gainNode: null,
+            init() {
+                try {
+                    this.context = new (window.AudioContext || window.webkitAudioContext)();
+                    this.gainNode = this.context.createGain();
+                    this.gainNode.connect(this.context.destination);
+                } catch (e) {
+                    console.log('Audio not supported');
+                }
+            },
+            playTone(freq, duration, volume = 0.1) {
+                if (!this.context) return;
+                const osc = this.context.createOscillator();
+                const gain = this.context.createGain();
+                osc.connect(gain);
+                gain.connect(this.gainNode);
+                osc.frequency.value = freq;
+                gain.gain.value = volume;
+                osc.start();
+                osc.stop(this.context.currentTime + duration);
+            },
+            playHeartbeat() {
+                this.playTone(80, 0.1, 0.05);
+                setTimeout(() => this.playTone(80, 0.1, 0.05), 100);
+            },
+            playInteract() {
+                this.playTone(440, 0.1);
+            },
+            playSuccess() {
+                this.playTone(523, 0.15);
+                setTimeout(() => this.playTone(659, 0.15), 150);
+                setTimeout(() => this.playTone(784, 0.3), 300);
+            },
+            playDanger() {
+                this.playTone(200, 0.5, 0.15);
+            }
+        };
+        // Initialize
+        function init() {
+            game.canvas = document.getElementById('game-canvas');
+            game.ctx = game.canvas.getContext('2d');
+            
+            resize();
+            window.addEventListener('resize', resize);
+            
+            setupControls();
+            audio.init();
+            
+            // Show start button after loading
+            setTimeout(() => {
+                document.querySelector('.spinner').style.display = 'none';
+                document.querySelector('#loading p').textContent = 'Listo para comenzar';
+                document.getElementById('start-btn').style.display = 'block';
+            }, 1500);
+        }
+        function resize() {
+            game.width = window.innerWidth;
+            game.height = window.innerHeight;
+            game.canvas.width = game.width;
+            game.canvas.height = game.height;
+        }
+        function setupControls() {
+            // Joystick
+            const joystickArea = document.getElementById('joystick-area');
+            const stick = document.getElementById('joystick-stick');
+            
+            joystickArea.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const touch = e.touches[0];
+                const rect = joystickArea.getBoundingClientRect();
+                game.joystick.active = true;
+                game.joystick.startX = rect.left + rect.width / 2;
+                game.joystick.startY = rect.top + rect.height / 2;
+            });
+            
+            joystickArea.addEventListener('touchmove', (e) => {
+                if (!game.joystick.active) return;
+                e.preventDefault();
+                const touch = e.touches[0];
+                const dx = touch.clientX - game.joystick.startX;
+                const dy = touch.clientY - game.joystick.startY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const maxDistance = 35;
+                
+                if (distance > maxDistance) {
+                    game.joystick.x = (dx / distance) * maxDistance;
+                    game.joystick.y = (dy / distance) * maxDistance;
+                } else {
+                    game.joystick.x = dx;
+                    game.joystick.y = dy;
+                }
+                
+                stick.style.transform = `translate(calc(-50% + ${game.joystick.x}px), calc(-50% + ${game.joystick.y}px))`;
+            });
+            
+            joystickArea.addEventListener('touchend', () => {
+                game.joystick.active = false;
+                game.joystick.x = 0;
+                game.joystick.y = 0;
+                stick.style.transform = 'translate(-50%, -50%)';
+            });
+            // Keyboard
+            window.addEventListener('keydown', (e) => {
+                if (game.state !== 'playing') return;
+                const speed = 35;
+                switch(e.key.toLowerCase()) {
+                    case 'w': game.joystick.y = -speed; break;
+                    case 's': game.joystick.y = speed; break;
+                    case 'a': game.joystick.x = -speed; break;
+                    case 'd': game.joystick.x = speed; break;
+                    case 'e': if (game.nearObject) interact(); break;
+                }
+            });
+            window.addEventListener('keyup', (e) => {
+                if (['w', 's'].includes(e.key.toLowerCase())) game.joystick.y = 0;
+                if (['a', 'd'].includes(e.key.toLowerCase())) game.joystick.x = 0;
+            });
+            // Camera rotation (swipe)
+            let touchStartX = 0;
+            game.canvas.addEventListener('touchstart', (e) => {
+                touchStartX = e.touches[0].clientX;
+            });
+            
+            game.canvas.addEventListener('touchmove', (e) => {
+                if (game.state !== 'playing') return;
+                const touchX = e.touches[0].clientX;
+                const delta = (touchX - touchStartX) * 0.005;
+                game.camera.targetAngle += delta;
+                touchStartX = touchX;
+            });
+            // Interact button
+            document.getElementById('interact-btn').addEventListener('click', interact);
+            // Puzzle close
+            document.getElementById('puzzle-close').addEventListener('click', closePuzzle);
+            // Start button
+            document.getElementById('start-btn').addEventListener('click', startGame);
+            // Replay button
+            document.getElementById('replay-btn').addEventListener('click', () => {
+                location.reload();
+            });
+            // Envelope
+            document.getElementById('envelope').addEventListener('click', () => {
+                document.getElementById('envelope').classList.add('open');
+                setTimeout(() => {
+                    document.getElementById('letter').classList.add('show');
+                    setTimeout(() => {
+                        document.getElementById('replay-btn').classList.add('show');
+                    }, 1000);
+                }, 1000);
+            });
+        }
+        function startGame() {
+            document.getElementById('loading').classList.add('hide');
+            initLevel(game.level);
+            updateStats();
+            requestAnimationFrame(gameLoop);
+        }
+        function initLevel(level) {
+            // Reset player position
+            game.player.x = 250;
+            game.player.y = 250;
+            
+            // Reset UI indicators
+            const doorReady = document.getElementById('door-ready');
+            if (doorReady) {
+                doorReady.style.display = 'none';
+            }
+            
+            // Reset puzzles
+            game.puzzles = {
+                code: { solved: false, code: generateCode() },
+                symbols: { solved: false, order: ['🌙', '⭐', '☀️'], selected: [] },
+                key: { solved: false, found: false },
+                memory: { solved: false, sequence: [], playerSequence: [] },
+                math: { solved: false, answer: 0 },
+                maze: { solved: false }
+            };
+            
+            // Reset objects
+            game.objects = [];
+            game.powerups = [];
+            game.shadows = [];
+            
+            // Level-specific configuration
+            switch(level) {
+                case 1:
+                    // Nivel 1: Tutorial básico
+                    game.objects = [
+                        { x: 400, y: 100, type: 'drawer', interactable: true },
+                        { x: 100, y: 400, type: 'table', interactable: true },
+                        { x: 450, y: 450, type: 'box', interactable: true },
+                        { x: 250, y: 20, type: 'door', interactable: false },
+                        { x: 150, y: 50, type: 'clue', interactable: true }
+                    ];
+                    game.shadow.speed = 0.5;
+                    game.shadow.spawnTime = Date.now() + 15000;
+                    game.requiredItems = 3;
+                    hideObjective('obj4');
+                    hideObjective('obj5');
+                    hideObjective('obj6');
+                    showObjective('obj1');
+                    showObjective('obj2');
+                    showObjective('obj3');
+                    break;
+                    
+                case 2:
+                    // Nivel 2: Más acertijos
+                    game.objects = [
+                        { x: 400, y: 100, type: 'drawer', interactable: true },
+                        { x: 100, y: 400, type: 'table', interactable: true },
+                        { x: 450, y: 450, type: 'box', interactable: true },
+                        { x: 350, y: 350, type: 'memory', interactable: true },
+                        { x: 250, y: 20, type: 'door', interactable: false },
+                        { x: 150, y: 50, type: 'clue', interactable: true },
+                        { x: 200, y: 300, type: 'shield', interactable: true }
+                    ];
+                    game.shadow.speed = 0.7;
+                    game.shadow.spawnTime = Date.now() + 12000;
+                    game.requiredItems = 4;
+                    showObjective('obj4');
+                    hideObjective('obj5');
+                    hideObjective('obj6');
+                    break;
+                    
+                case 3:
+                    // Nivel 3: Sombras múltiples
+                    game.objects = [
+                        { x: 400, y: 100, type: 'drawer', interactable: true },
+                        { x: 100, y: 400, type: 'table', interactable: true },
+                        { x: 450, y: 450, type: 'box', interactable: true },
+                        { x: 350, y: 350, type: 'memory', interactable: true },
+                        { x: 80, y: 80, type: 'math', interactable: true },
+                        { x: 250, y: 20, type: 'door', interactable: false },
+                        { x: 150, y: 50, type: 'clue', interactable: true },
+                        { x: 200, y: 300, type: 'shield', interactable: true },
+                        { x: 400, y: 400, type: 'speed', interactable: true }
+                    ];
+                    spawnMultipleShadows(2);
+                    game.shadow.speed = 0.9;
+                    game.shadow.spawnTime = Date.now() + 10000;
+                    game.requiredItems = 5;
+                    showObjective('obj5');
+                    hideObjective('obj6');
+                    break;
+                    
+                case 4:
+                    // Nivel 4: Laberinto
+                    game.objects = [
+                        { x: 400, y: 100, type: 'drawer', interactable: true },
+                        { x: 100, y: 400, type: 'maze', interactable: true },
+                        { x: 450, y: 450, type: 'box', interactable: true },
+                        { x: 350, y: 350, type: 'memory', interactable: true },
+                        { x: 80, y: 80, type: 'math', interactable: true },
+                        { x: 250, y: 20, type: 'door', interactable: false },
+                        { x: 150, y: 50, type: 'clue', interactable: true },
+                        { x: 200, y: 300, type: 'shield', interactable: true },
+                        { x: 400, y: 400, type: 'speed', interactable: true },
+                        { x: 100, y: 200, type: 'shield', interactable: true }
+                    ];
+                    spawnMultipleShadows(3);
+                    game.shadow.speed = 1.1;
+                    game.shadow.spawnTime = Date.now() + 8000;
+                    game.requiredItems = 6;
+                    showObjective('obj6');
+                    break;
+                    
+                case 5:
+                    // Nivel 5: Final Boss
+                    game.objects = [
+                        { x: 400, y: 100, type: 'drawer', interactable: true },
+                        { x: 100, y: 400, type: 'table', interactable: true },
+                        { x: 450, y: 450, type: 'box', interactable: true },
+                        { x: 350, y: 350, type: 'memory', interactable: true },
+                        { x: 80, y: 80, type: 'math', interactable: true },
+                        { x: 100, y: 400, type: 'maze', interactable: true },
+                        { x: 250, y: 20, type: 'door', interactable: false },
+                        { x: 150, y: 50, type: 'clue', interactable: true },
+                        { x: 200, y: 300, type: 'shield', interactable: true },
+                        { x: 400, y: 400, type: 'speed', interactable: true },
+                        { x: 300, y: 200, type: 'shield', interactable: true }
+                    ];
+                    spawnMultipleShadows(4);
+                    game.shadow.speed = 1.3;
+                    game.shadow.spawnTime = Date.now() + 5000;
+                    game.requiredItems = 6;
+                    break;
+            }
+            
+            showMessage(`🎮 NIVEL ${level} - ¡Resuelve ${game.requiredItems} acertijos!`);
+        }
+        function generateCode() {
+            return Math.floor(100 + Math.random() * 900).toString();
+        }
+        function spawnMultipleShadows(count) {
+            game.shadows = [];
+            const positions = [
+                {x: 50, y: 50},
+                {x: 450, y: 50},
+                {x: 50, y: 450},
+                {x: 450, y: 450}
+            ];
+            
+            for (let i = 0; i < count; i++) {
+                game.shadows.push({
+                    x: positions[i].x,
+                    y: positions[i].y,
+                    speed: game.shadow.speed,
+                    active: false
+                });
+            }
+        }
+        function showObjective(id) {
+            const elem = document.getElementById(id);
+            if (elem) {
+                elem.style.display = 'block';
+                elem.classList.remove('completed');
+            }
+        }
+        function hideObjective(id) {
+            const elem = document.getElementById(id);
+            if (elem) elem.style.display = 'none';
+        }
+        function updateStats() {
+            document.getElementById('level-display').textContent = game.level;
+            document.getElementById('score-display').textContent = game.score;
+            document.getElementById('items-display').textContent = `${game.collectedItems}/${game.requiredItems}`;
+            
+            let hearts = '';
+            for (let i = 0; i < game.lives; i++) {
+                hearts += '❤️';
+            }
+            document.getElementById('lives-display').innerHTML = hearts;
+            
+            if (game.hasShield) {
+                document.getElementById('shield-display').style.display = 'flex';
+                const timeLeft = Math.ceil((game.shieldTime - Date.now()) / 1000);
+                document.getElementById('shield-time').textContent = timeLeft + 's';
+            } else {
+                document.getElementById('shield-display').style.display = 'none';
+            }
+        }
+        function interact() {
+            if (!game.nearObject) return;
+            
+            audio.playInteract();
+            const obj = game.nearObject;
+            
+            if (obj.type === 'drawer') {
+                showPuzzle('code');
+            } else if (obj.type === 'table') {
+                showPuzzle('symbols');
+            } else if (obj.type === 'box') {
+                if (!game.puzzles.key.found) {
+                    game.puzzles.key.found = true;
+                    game.collectedItems++;
+                    game.score += 100;
+                    showMessage('¡Encontraste la llave! 🔑 +100');
+                    setTimeout(() => {
+                        game.puzzles.key.solved = true;
+                        document.getElementById('obj3').classList.add('completed');
+                        audio.playSuccess();
+                        checkWin();
+                    }, 1500);
+                    obj.interactable = false;
+                }
+            } else if (obj.type === 'memory') {
+                showPuzzle('memory');
+            } else if (obj.type === 'math') {
+                showPuzzle('math');
+            } else if (obj.type === 'maze') {
+                showPuzzle('maze');
+            } else if (obj.type === 'shield') {
+                game.hasShield = true;
+                game.shieldTime = Date.now() + 10000;
+                game.score += 50;
+                showMessage('🛡️ ¡Escudo activado! 10s de protección +50');
+                audio.playSuccess();
+                obj.interactable = false;
+                game.objects = game.objects.filter(o => o !== obj);
+            } else if (obj.type === 'speed') {
+                game.hasSpeed = true;
+                game.speedTime = Date.now() + 8000;
+                game.player.speed = 3.5;
+                game.score += 50;
+                showMessage('⚡ ¡Velocidad aumentada! 8s +50');
+                audio.playSuccess();
+                obj.interactable = false;
+                game.objects = game.objects.filter(o => o !== obj);
+            } else if (obj.type === 'door') {
+                if (allPuzzlesSolved()) {
+                    escape();
+                } else {
+                    const remaining = game.requiredItems - game.collectedItems;
+                    showMessage(`La puerta está cerrada. Faltan ${remaining} acertijos.`);
+                }
+            } else if (obj.type === 'clue') {
+                showMessage(`Pista en la pared: "${game.puzzles.code.code}"`);
+            }
+            
+            updateStats();
+        }
+        function showPuzzle(type) {
+            const modal = document.getElementById('puzzle-modal');
+            const title = document.getElementById('puzzle-title');
+            const content = document.getElementById('puzzle-content');
+            
+            if (type === 'code') {
+                if (game.puzzles.code.solved) {
+                    showMessage('Ya resolviste este acertijo.');
+                    return;
+                }
+                title.textContent = '🔐 Cajón con Combinación';
+                content.innerHTML = `
+                    <p style="text-align: center; margin-bottom: 15px;">Ingresa el código de 3 dígitos:</p>
+                    <div class="code-input">
+                        <input type="number" class="code-digit" maxlength="1" id="digit1">
+                        <input type="number" class="code-digit" maxlength="1" id="digit2">
+                        <input type="number" class="code-digit" maxlength="1" id="digit3">
+                    </div>
+                    <button onclick="checkCode()" style="width: 100%; padding: 12px; background: rgba(100, 150, 255, 0.3); border: 2px solid rgba(100, 150, 255, 0.5); border-radius: 8px; color: #fff; font-size: 16px; cursor: pointer;">PROBAR</button>
+                `;
+                
+                setTimeout(() => {
+                    const inputs = document.querySelectorAll('.code-digit');
+                    inputs.forEach((input, i) => {
+                        input.addEventListener('input', (e) => {
+                            if (e.target.value.length > 1) {
+                                e.target.value = e.target.value.slice(0, 1);
+                            }
+                            if (e.target.value && i < inputs.length - 1) {
+                                inputs[i + 1].focus();
+                            }
+                        });
+                    });
+                    inputs[0].focus();
+                }, 100);
+                
+            } else if (type === 'symbols') {
+                if (game.puzzles.symbols.solved) {
+                    showMessage('Ya resolviste este acertijo.');
+                    return;
+                }
+                title.textContent = '🧩 Puzzle de Símbolos';
+                content.innerHTML = `
+                    <p style="text-align: center; margin-bottom: 15px;">Ordena los símbolos: Noche → Estrellas → Sol</p>
+                    <div class="symbol-grid">
+                        <div class="symbol" onclick="selectSymbol('☀️')">☀️</div>
+                        <div class="symbol" onclick="selectSymbol('⭐')">⭐</div>
+                        <div class="symbol" onclick="selectSymbol('🌙')">🌙</div>
+                    </div>
+                    <p style="text-align: center; margin-top: 10px;">Orden: <span id="symbol-order">-</span></p>
+                `;
+            } else if (type === 'memory') {
+                if (game.puzzles.memory.solved) {
+                    showMessage('Ya resolviste este acertijo.');
+                    return;
+                }
+                
+                // Generar secuencia aleatoria
+                const symbols = ['🔴', '🔵', '🟢', '🟡', '🟣', '🟠'];
+                game.puzzles.memory.sequence = [];
+                for (let i = 0; i < 4; i++) {
+                    game.puzzles.memory.sequence.push(symbols[Math.floor(Math.random() * symbols.length)]);
+                }
+                game.puzzles.memory.playerSequence = [];
+                
+                title.textContent = '🧠 Juego de Memoria';
+                content.innerHTML = `
+                    <p style="text-align: center; margin-bottom: 15px;">Memoriza la secuencia:</p>
+                    <div id="memory-display" style="text-align: center; font-size: 40px; min-height: 60px; margin: 20px 0;"></div>
+                    <div class="symbol-grid" id="memory-grid" style="display: none;">
+                        ${symbols.map(s => `<div class="symbol" onclick="selectMemorySymbol('${s}')">${s}</div>`).join('')}
+                    </div>
+                    <p id="memory-status" style="text-align: center; margin-top: 10px;"></p>
+                `;
+                
+                // Mostrar secuencia
+                setTimeout(() => {
+                    let index = 0;
+                    const display = document.getElementById('memory-display');
+                    const interval = setInterval(() => {
+                        if (index < game.puzzles.memory.sequence.length) {
+                            display.textContent = game.puzzles.memory.sequence[index];
+                            audio.playTone(400 + index * 100, 0.3);
+                            index++;
+                        } else {
+                            clearInterval(interval);
+                            display.textContent = '❓';
+                            document.getElementById('memory-grid').style.display = 'grid';
+                            document.getElementById('memory-status').textContent = 'Repite la secuencia:';
+                        }
+                    }, 800);
+                }, 500);
+                
+            } else if (type === 'math') {
+                if (game.puzzles.math.solved) {
+                    showMessage('Ya resolviste este acertijo.');
+                    return;
+                }
+                
+                const num1 = Math.floor(Math.random() * 20) + 5;
+                const num2 = Math.floor(Math.random() * 20) + 5;
+                const operations = ['+', '-', '*'];
+                const op = operations[Math.floor(Math.random() * operations.length)];
+                
+                let answer;
+                switch(op) {
+                    case '+': answer = num1 + num2; break;
+                    case '-': answer = num1 - num2; break;
+                    case '*': answer = num1 * num2; break;
+                }
+                
+                game.puzzles.math.answer = answer;
+                
+                title.textContent = '🔢 Ecuación Matemática';
+                content.innerHTML = `
+                    <p style="text-align: center; font-size: 32px; margin: 30px 0;">${num1} ${op} ${num2} = ?</p>
+                    <input type="number" id="math-answer" style="width: 100%; padding: 12px; background: rgba(0, 0, 0, 0.5); border: 2px solid rgba(100, 150, 255, 0.5); border-radius: 8px; text-align: center; font-size: 24px; color: #fff; outline: none; margin-bottom: 15px;">
+                    <button onclick="checkMath()" style="width: 100%; padding: 12px; background: rgba(100, 150, 255, 0.3); border: 2px solid rgba(100, 150, 255, 0.5); border-radius: 8px; color: #fff; font-size: 16px; cursor: pointer;">VERIFICAR</button>
+                `;
+                
+                setTimeout(() => {
+                    document.getElementById('math-answer').focus();
+                }, 100);
+                
+            } else if (type === 'maze') {
+                if (game.puzzles.maze.solved) {
+                    showMessage('Ya resolviste este acertijo.');
+                    return;
+                }
+                
+                title.textContent = '🌀 Mini Laberinto';
+                content.innerHTML = `
+                    <p style="text-align: center; margin-bottom: 15px;">Llega a la salida (🏁)</p>
+                    <canvas id="maze-canvas" width="320" height="320" style="border: 2px solid rgba(100, 150, 255, 0.5); border-radius: 8px; display: block; margin: 0 auto;"></canvas>
+                    <p style="text-align: center; margin-top: 10px; font-size: 12px;">Usa las flechas o arrastra para mover</p>
+                `;
+                
+                setTimeout(() => {
+                    initMazeGame();
+                }, 100);
+            }
+            
+            modal.classList.add('active');
+        }
+        function closePuzzle() {
+            document.getElementById('puzzle-modal').classList.remove('active');
+        }
+        window.checkCode = function() {
+            const d1 = document.getElementById('digit1').value;
+            const d2 = document.getElementById('digit2').value;
+            const d3 = document.getElementById('digit3').value;
+            const code = d1 + d2 + d3;
+            
+            if (code === game.puzzles.code.code) {
+                if (!game.puzzles.code.solved) {
+                    game.puzzles.code.solved = true;
+                    game.collectedItems++;
+                    game.score += 150;
+                    document.getElementById('obj1').classList.add('completed');
+                    audio.playSuccess();
+                    closePuzzle();
+                    showMessage('¡Código correcto! Cajón abierto. ✓ +150');
+                    checkWin();
+                }
+            } else {
+                showMessage('❌ Código incorrecto');
+                audio.playDanger();
+            }
+        };
+        window.selectSymbol = function(symbol) {
+            if (game.puzzles.symbols.selected.includes(symbol)) {
+                game.puzzles.symbols.selected = game.puzzles.symbols.selected.filter(s => s !== symbol);
+            } else if (game.puzzles.symbols.selected.length < 3) {
+                game.puzzles.symbols.selected.push(symbol);
+            }
+            
+            document.querySelectorAll('.symbol').forEach(el => {
+                el.classList.remove('selected');
+                if (game.puzzles.symbols.selected.includes(el.textContent)) {
+                    el.classList.add('selected');
+                }
+            });
+            
+            document.getElementById('symbol-order').textContent = 
+                game.puzzles.symbols.selected.join(' → ') || '-';
+            
+            if (game.puzzles.symbols.selected.length === 3) {
+                setTimeout(() => {
+                    if (JSON.stringify(game.puzzles.symbols.selected) === 
+                        JSON.stringify(game.puzzles.symbols.order)) {
+                        if (!game.puzzles.symbols.solved) {
+                            game.puzzles.symbols.solved = true;
+                            game.collectedItems++;
+                            game.score += 150;
+                            document.getElementById('obj2').classList.add('completed');
+                            audio.playSuccess();
+                            closePuzzle();
+                            showMessage('¡Orden correcto! Puzzle resuelto. ✓ +150');
+                            checkWin();
+                        }
+                    } else {
+                        showMessage('❌ Orden incorrecto');
+                        audio.playDanger();
+                        game.puzzles.symbols.selected = [];
+                        setTimeout(() => {
+                            if (document.getElementById('symbol-order')) {
+                                document.getElementById('symbol-order').textContent = '-';
+                            }
+                            document.querySelectorAll('.symbol').forEach(el => {
+                                el.classList.remove('selected');
+                            });
+                        }, 1000);
+                    }
+                }, 500);
+            }
+        };
+        window.selectMemorySymbol = function(symbol) {
+            game.puzzles.memory.playerSequence.push(symbol);
+            
+            const index = game.puzzles.memory.playerSequence.length - 1;
+            
+            if (game.puzzles.memory.playerSequence[index] !== game.puzzles.memory.sequence[index]) {
+                showMessage('❌ Secuencia incorrecta');
+                audio.playDanger();
+                game.puzzles.memory.playerSequence = [];
+                setTimeout(() => {
+                    if (document.getElementById('memory-status')) {
+                        document.getElementById('memory-status').textContent = 'Intenta de nuevo:';
+                    }
+                }, 1000);
+            } else {
+                audio.playTone(400 + index * 100, 0.2);
+                
+                if (game.puzzles.memory.playerSequence.length === game.puzzles.memory.sequence.length) {
+                    if (!game.puzzles.memory.solved) {
+                        game.puzzles.memory.solved = true;
+                        game.collectedItems++;
+                        game.score += 200;
+                        document.getElementById('obj4').classList.add('completed');
+                        audio.playSuccess();
+                        closePuzzle();
+                        showMessage('¡Secuencia correcta! Memoria completada. ✓ +200');
+                        checkWin();
+                    }
+                }
+            }
+        };
+        window.checkMath = function() {
+            const answer = parseInt(document.getElementById('math-answer').value);
+            
+            if (answer === game.puzzles.math.answer) {
+                if (!game.puzzles.math.solved) {
+                    game.puzzles.math.solved = true;
+                    game.collectedItems++;
+                    game.score += 150;
+                    document.getElementById('obj5').classList.add('completed');
+                    audio.playSuccess();
+                    closePuzzle();
+                    showMessage('¡Respuesta correcta! Ecuación resuelta. ✓ +150');
+                    checkWin();
+                }
+            } else {
+                showMessage('❌ Respuesta incorrecta');
+                audio.playDanger();
+            }
+        };
+        function initMazeGame() {
+            const canvas = document.getElementById('maze-canvas');
+            if (!canvas) return;
+            
+            const ctx = canvas.getContext('2d');
+            const cellSize = 40;
+            const cols = 8;
+            const rows = 8;
+            
+            // Simple maze layout (1 = wall, 0 = path)
+            const maze = [
+                [1,1,1,1,1,1,1,1],
+                [1,0,0,0,1,0,0,1],
+                [1,0,1,0,1,0,1,1],
+                [1,0,1,0,0,0,0,1],
+                [1,0,1,1,1,1,0,1],
+                [1,0,0,0,0,0,0,1],
+                [1,1,1,1,1,0,1,1],
+                [1,1,1,1,1,1,1,1]
+            ];
+            
+            let playerPos = {x: 1, y: 1};
+            const exitPos = {x: 5, y: 6};
+            
+            function drawMaze() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // Draw maze
+                for (let y = 0; y < rows; y++) {
+                    for (let x = 0; x < cols; x++) {
+                        if (maze[y][x] === 1) {
+                            ctx.fillStyle = '#2a2a3e';
+                            ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+                        } else {
+                            ctx.fillStyle = '#1a1a2e';
+                            ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+                        }
+                        ctx.strokeStyle = '#0a0a0f';
+                        ctx.strokeRect(x * cellSize, y * cellSize, cellSize, cellSize);
+                    }
+                }
+                
+                // Draw exit
+                ctx.fillStyle = '#4ade80';
+                ctx.font = '30px Arial';
+                ctx.fillText('🏁', exitPos.x * cellSize + 5, exitPos.y * cellSize + 30);
+                
+                // Draw player
+                ctx.fillStyle = '#6495ed';
+                ctx.beginPath();
+                ctx.arc(
+                    playerPos.x * cellSize + cellSize / 2,
+                    playerPos.y * cellSize + cellSize / 2,
+                    cellSize / 3,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+            }
+            
+            function movePlayer(dx, dy) {
+                const newX = playerPos.x + dx;
+                const newY = playerPos.y + dy;
+                
+                if (newX >= 0 && newX < cols && newY >= 0 && newY < rows && maze[newY][newX] === 0) {
+                    playerPos.x = newX;
+                    playerPos.y = newY;
+                    audio.playTone(300, 0.05);
+                    
+                    if (playerPos.x === exitPos.x && playerPos.y === exitPos.y) {
+                        if (!game.puzzles.maze.solved) {
+                            game.puzzles.maze.solved = true;
+                            game.collectedItems++;
+                            game.score += 250;
+                            document.getElementById('obj6').classList.add('completed');
+                            audio.playSuccess();
+                            closePuzzle();
+                            showMessage('¡Laberinto completado! ✓ +250');
+                            checkWin();
+                        }
+                    }
+                    
+                    drawMaze();
+                }
+            }
+            
+            // Keyboard controls
+            const keyHandler = (e) => {
+                switch(e.key) {
+                    case 'ArrowUp': movePlayer(0, -1); break;
+                    case 'ArrowDown': movePlayer(0, 1); break;
+                    case 'ArrowLeft': movePlayer(-1, 0); break;
+                    case 'ArrowRight': movePlayer(1, 0); break;
+                }
+            };
+            window.addEventListener('keydown', keyHandler);
+            
+            // Touch controls
+            let touchStartX, touchStartY;
+            canvas.addEventListener('touchstart', (e) => {
+                touchStartX = e.touches[0].clientX;
+                touchStartY = e.touches[0].clientY;
+            });
+            
+            canvas.addEventListener('touchend', (e) => {
+                const touchEndX = e.changedTouches[0].clientX;
+                const touchEndY = e.changedTouches[0].clientY;
+                const dx = touchEndX - touchStartX;
+                const dy = touchEndY - touchStartY;
+                
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    movePlayer(dx > 0 ? 1 : -1, 0);
+                } else {
+                    movePlayer(0, dy > 0 ? 1 : -1);
+                }
+            });
+            
+            drawMaze();
+        }
+        function showMessage(text) {
+            const msg = document.getElementById('message');
+            msg.textContent = text;
+            msg.classList.add('show');
+            setTimeout(() => msg.classList.remove('show'), 2500);
+        }
+        function allPuzzlesSolved() {
+            return game.collectedItems >= game.requiredItems;
+        }
+        function checkWin() {
+            updateStats();
+            console.log(`Items colectados: ${game.collectedItems}/${game.requiredItems}`);
+            
+            if (allPuzzlesSolved()) {
+                const door = game.objects.find(o => o.type === 'door');
+                if (door) {
+                    door.interactable = true;
+                }
+                
+                // Mostrar indicador de puerta lista
+                const doorReady = document.getElementById('door-ready');
+                if (doorReady) {
+                    doorReady.style.display = 'block';
+                }
+                
+                showMessage(`¡Todos los acertijos resueltos! Ve a la puerta. 🚪 Puntos: ${game.score}`);
+                audio.playSuccess();
+            } else {
+                const remaining = game.requiredItems - game.collectedItems;
+                console.log(`Faltan ${remaining} acertijos`);
+            }
+        }
+        function escape() {
+            game.state = 'escaping';
+            
+            // Aumentar velocidad de todas las sombras
+            game.shadows.forEach(s => s.speed = 3);
+            
+            // Move player to door automatically
+            const doorObj = game.objects.find(o => o.type === 'door');
+            const interval = setInterval(() => {
+                const dx = doorObj.x - game.player.x;
+                const dy = doorObj.y - game.player.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                if (dist < 20) {
+                    clearInterval(interval);
+                    nextLevel();
+                } else {
+                    game.player.x += (dx / dist) * 4;
+                    game.player.y += (dy / dist) * 4;
+                }
+            }, 16);
+        }
+        function nextLevel() {
+            if (game.level >= game.maxLevel) {
+                finishGame();
+            } else {
+                game.level++;
+                game.score += 500; // Bonus por nivel completado
+                game.collectedItems = 0;
+                showMessage(`🎉 ¡Nivel ${game.level - 1} completado! +500 puntos`);
+                
+                setTimeout(() => {
+                    game.state = 'playing';
+                    initLevel(game.level);
+                    updateStats();
+                }, 2000);
+            }
+        }
+        function finishGame() {
+            game.state = 'finished';
+            
+            // White flash
+            game.ctx.fillStyle = '#fff';
+            game.ctx.fillRect(0, 0, game.width, game.height);
+            
+            setTimeout(() => {
+                document.getElementById('final-screen').classList.add('show');
+                document.getElementById('final-score').textContent = game.score;
+                startParticles();
+            }, 500);
+        }
+        function startParticles() {
+            const canvas = document.getElementById('particles-canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            const particles = [];
+            for (let i = 0; i < 50; i++) {
+                particles.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    vx: (Math.random() - 0.5) * 0.5,
+                    vy: (Math.random() - 0.5) * 0.5,
+                    size: Math.random() * 3 + 1
+                });
+            }
+            
+            function animateParticles() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                
+                particles.forEach(p => {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    
+                    if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
+                    if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+                });
+                
+                if (game.state === 'finished') {
+                    requestAnimationFrame(animateParticles);
+                }
+            }
+            
+            animateParticles();
+        }
+        function gameLoop(timestamp) {
+            if (game.state === 'finished') return;
+            
+            game.time = timestamp;
+            update();
+            render();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        function update() {
+            if (game.state !== 'playing') return;
+            
+            // Move player
+            const speed = game.hasSpeed ? 0.15 : 0.1;
+            if (game.joystick.x !== 0 || game.joystick.y !== 0) {
+                const newX = game.player.x + game.joystick.x * speed;
+                const newY = game.player.y + game.joystick.y * speed;
+                
+                // Collision detection with walls
+                if (newX > 50 && newX < 450 && newY > 50 && newY < 450) {
+                    game.player.x = newX;
+                    game.player.y = newY;
+                }
+            }
+            
+            // Camera smoothing
+            game.camera.angle += (game.camera.targetAngle - game.camera.angle) * 0.1;
+            
+            // Power-ups timer
+            if (game.hasShield && Date.now() > game.shieldTime) {
+                game.hasShield = false;
+                showMessage('Escudo desactivado');
+            }
+            
+            if (game.hasSpeed && Date.now() > game.speedTime) {
+                game.hasSpeed = false;
+                game.player.speed = 2;
+                showMessage('Velocidad normal');
+            }
+            
+            updateStats();
+            
+            // Shadow behavior - activate all shadows
+            if (Date.now() > game.shadow.spawnTime) {
+                game.shadows.forEach(s => {
+                    if (!s.active) {
+                        s.active = true;
+                    }
+                });
+                
+                if (game.shadows.length === 0 || !game.shadows[0].active) {
+                    // Crear primera sombra si no hay
+                    if (game.shadows.length === 0) {
+                        game.shadows.push({
+                            x: 50,
+                            y: 50,
+                            speed: game.shadow.speed,
+                            active: true
+                        });
+                    } else {
+                        game.shadows[0].active = true;
+                    }
+                    
+                    showMessage('Las sombras han despertado... 👁️');
+                    audio.playDanger();
+                }
+            }
+            
+            // Update all shadows
+            let minDist = Infinity;
+            game.shadows.forEach(shadow => {
+                if (!shadow.active) return;
+                
+                const dx = game.player.x - shadow.x;
+                const dy = game.player.y - shadow.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                minDist = Math.min(minDist, dist);
+                
+                if (dist > 10) {
+                    shadow.x += (dx / dist) * shadow.speed;
+                    shadow.y += (dy / dist) * shadow.speed;
+                }
+                
+                // Caught by this shadow
+                if (dist < 20) {
+                    caught();
+                }
+            });
+            
+            // Increase shadow speed over time
+            const speedIncrease = 0.5 + game.time * 0.00001;
+            game.shadows.forEach(s => {
+                s.speed = Math.min(1.5, speedIncrease);
+            });
+            
+            // Tension based on closest distance
+            game.tension = Math.max(0, 100 - minDist);
+            
+            // Heartbeat when close
+            if (minDist < 100 && Math.random() < 0.02) {
+                audio.playHeartbeat();
+            }
+            
+            // Update tension bar
+            document.getElementById('tension-fill').style.width = game.tension + '%';
+            
+            // Check nearby objects
+            game.nearObject = null;
+            const interactBtn = document.getElementById('interact-btn');
+            
+            game.objects.forEach(obj => {
+                if (!obj.interactable && obj.type !== 'door') return;
+                const dx = game.player.x - obj.x;
+                const dy = game.player.y - obj.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                // Puerta tiene rango mayor
+                const range = obj.type === 'door' ? 80 : 50;
+                
+                if (dist < range) {
+                    game.nearObject = obj;
+                }
+            });
+            
+            if (game.nearObject) {
+                interactBtn.classList.add('visible');
+                // Mostrar qué objeto está cerca
+                const objName = game.nearObject.type === 'door' ? '🚪 PUERTA' :
+                               game.nearObject.type === 'drawer' ? '🔐 CAJÓN' :
+                               game.nearObject.type === 'table' ? '🧩 MESA' :
+                               game.nearObject.type === 'box' ? '📦 CAJA' :
+                               game.nearObject.type === 'memory' ? '🧠 MEMORIA' :
+                               game.nearObject.type === 'math' ? '🔢 ECUACIÓN' :
+                               game.nearObject.type === 'maze' ? '🌀 LABERINTO' :
+                               game.nearObject.type === 'shield' ? '🛡️ ESCUDO' :
+                               game.nearObject.type === 'speed' ? '⚡ VELOCIDAD' :
+                               game.nearObject.type === 'clue' ? '📄 PISTA' : 'USAR';
+                interactBtn.textContent = objName;
+            } else {
+                interactBtn.classList.remove('visible');
+                interactBtn.textContent = 'USAR';
+            }
+        }
+        function caught() {
+            if (game.hasShield) {
+                showMessage('¡El escudo te protegió! 🛡️');
+                game.hasShield = false;
+                
+                // Alejar sombras
+                game.shadows.forEach(s => {
+                    s.x = Math.random() * 400 + 50;
+                    s.y = Math.random() * 400 + 50;
+                });
+                
+                updateStats();
+                return;
+            }
+            
+            game.lives--;
+            updateStats();
+            
+            if (game.lives <= 0) {
+                game.state = 'caught';
+                audio.playDanger();
+                document.getElementById('game-container').classList.add('glitch');
+                
+                setTimeout(() => {
+                    showMessage('Game Over... Reiniciando...');
+                    setTimeout(() => {
+                        location.reload();
+                    }, 2000);
+                }, 500);
+            } else {
+                game.state = 'respawning';
+                audio.playDanger();
+                showMessage(`¡La sombra te atrapó! Vidas restantes: ${game.lives} ❤️`);
+                
+                // Respawn
+                game.player.x = 250;
+                game.player.y = 250;
+                
+                // Alejar sombras
+                game.shadows.forEach(s => {
+                    s.x = Math.random() * 400 + 50;
+                    s.y = Math.random() * 400 + 50;
+                });
+                
+                setTimeout(() => {
+                    game.state = 'playing';
+                }, 2000);
+            }
+        }
+        function render() {
+            const ctx = game.ctx;
+            
+            // Clear
+            ctx.fillStyle = '#0a0a0f';
+            ctx.fillRect(0, 0, game.width, game.height);
+            
+            // Draw room (simple top-down for performance)
+            ctx.save();
+            ctx.translate(game.width / 2, game.height / 2);
+            
+            // Floor
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(-250, -250, 500, 500);
+            
+            // Walls
+            ctx.strokeStyle = '#2a2a3e';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(-250, -250, 500, 500);
+            
+            // Grid
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.lineWidth = 1;
+            for (let i = -250; i <= 250; i += 50) {
+                ctx.beginPath();
+                ctx.moveTo(i, -250);
+                ctx.lineTo(i, 250);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(-250, i);
+                ctx.lineTo(250, i);
+                ctx.stroke();
+            }
+            
+            // Objects
+            game.objects.forEach(obj => {
+                const x = obj.x - 250;
+                const y = obj.y - 250;
+                
+                ctx.fillStyle = obj.interactable ? 'rgba(100, 150, 255, 0.5)' : 'rgba(255, 255, 255, 0.3)';
+                
+                if (obj.type === 'door') {
+                    ctx.fillStyle = allPuzzlesSolved() ? 'rgba(100, 255, 100, 0.8)' : 'rgba(200, 100, 100, 0.5)';
+                    ctx.fillRect(x - 30, y - 8, 60, 16);
+                    
+                    // Marco de la puerta
+                    ctx.strokeStyle = allPuzzlesSolved() ? '#4ade80' : '#ff6b6b';
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(x - 30, y - 8, 60, 16);
+                    
+                    // Indicador visual si está desbloqueada
+                    if (allPuzzlesSolved()) {
+                        ctx.fillStyle = '#fff';
+                        ctx.font = '24px Arial';
+                        ctx.fillText('✓', x - 8, y + 6);
+                        
+                        // Brillo pulsante
+                        const pulse = Math.sin(Date.now() * 0.005) * 0.3 + 0.7;
+                        ctx.shadowColor = '#4ade80';
+                        ctx.shadowBlur = 20 * pulse;
+                        ctx.strokeRect(x - 30, y - 8, 60, 16);
+                        ctx.shadowBlur = 0;
+                    }
+                } else if (obj.type === 'drawer') {
+                    ctx.fillRect(x - 15, y - 15, 30, 30);
+                } else if (obj.type === 'table' || obj.type === 'memory') {
+                    ctx.fillRect(x - 20, y - 20, 40, 40);
+                } else if (obj.type === 'box' || obj.type === 'math') {
+                    ctx.fillRect(x - 10, y - 10, 20, 20);
+                } else if (obj.type === 'maze') {
+                    ctx.fillRect(x - 15, y - 15, 30, 30);
+                    ctx.fillStyle = '#fff';
+                    ctx.font = '20px Arial';
+                    ctx.fillText('🌀', x - 10, y + 5);
+                } else if (obj.type === 'shield') {
+                    ctx.fillStyle = 'rgba(74, 222, 128, 0.6)';
+                    ctx.beginPath();
+                    ctx.arc(x, y, 12, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#fff';
+                    ctx.font = '16px Arial';
+                    ctx.fillText('🛡️', x - 8, y + 5);
+                } else if (obj.type === 'speed') {
+                    ctx.fillStyle = 'rgba(255, 200, 50, 0.6)';
+                    ctx.beginPath();
+                    ctx.arc(x, y, 12, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#fff';
+                    ctx.font = '16px Arial';
+                    ctx.fillText('⚡', x - 8, y + 5);
+                } else if (obj.type === 'clue') {
+                    ctx.font = '20px Arial';
+                    ctx.fillText('📄', x - 10, y + 10);
+                }
+            });
+            
+            // Shadows - draw all
+            game.shadows.forEach(shadow => {
+                if (!shadow.active) return;
+                
+                const sx = shadow.x - 250;
+                const sy = shadow.y - 250;
+                
+                const gradient = ctx.createRadialGradient(sx, sy, 0, sx, sy, 30);
+                gradient.addColorStop(0, 'rgba(0, 0, 0, 0.8)');
+                gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(sx, sy, 30, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Eyes
+                ctx.fillStyle = '#ff0000';
+                ctx.beginPath();
+                ctx.arc(sx - 5, sy - 5, 3, 0, Math.PI * 2);
+                ctx.arc(sx + 5, sy - 5, 3, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            
+            // Player
+            const px = game.player.x - 250;
+            const py = game.player.y - 250;
+            
+            // Player light
+            const lightRadius = game.hasSpeed ? 100 : 80;
+            const lightGradient = ctx.createRadialGradient(px, py, 0, px, py, lightRadius);
+            lightGradient.addColorStop(0, 'rgba(255, 255, 200, 0.3)');
+            lightGradient.addColorStop(1, 'rgba(255, 255, 200, 0)');
+            
+            ctx.fillStyle = lightGradient;
+            ctx.beginPath();
+            ctx.arc(px, py, lightRadius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Player
+            ctx.fillStyle = game.hasSpeed ? '#ffd700' : (game.hasShield ? '#4ade80' : '#6495ed');
+            ctx.beginPath();
+            ctx.arc(px, py, game.player.radius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Shield effect
+            if (game.hasShield) {
+                ctx.strokeStyle = 'rgba(74, 222, 128, 0.5)';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(px, py, game.player.radius + 5 + Math.sin(Date.now() * 0.005) * 3, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            
+            ctx.restore();
+            
+            // Dust particles
+            for (let i = 0; i < 20; i++) {
+                const x = (Math.sin(game.time * 0.001 + i) * 0.5 + 0.5) * game.width;
+                const y = (Math.cos(game.time * 0.0007 + i * 2) * 0.5 + 0.5) * game.height;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                ctx.beginPath();
+                ctx.arc(x, y, 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            // Vignette
+            const vignette = ctx.createRadialGradient(
+                game.width / 2, game.height / 2, 0,
+                game.width / 2, game.height / 2, game.width / 2
+            );
+            vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
+            vignette.addColorStop(1, 'rgba(0, 0, 0, 0.7)');
+            ctx.fillStyle = vignette;
+            ctx.fillRect(0, 0, game.width, game.height);
+        }
+        // Start
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
